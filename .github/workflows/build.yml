@@ -1,21 +1,24 @@
-name: Build Executables
+name: Build Application
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
     tags:
       - 'v*'
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -23,24 +26,36 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pyinstaller
     
-    - name: Build with PyInstaller
+    - name: Build with PyInstaller (Windows)
       run: |
-        pyinstaller --onefile --windowed --name "DummyDataGenerator" main.py
+        pyinstaller --onefile --windowed --name "成績入力シート作成ツール" run.py
+    
+    - name: Create release package
+      run: |
+        mkdir release
+        cp dist/成績入力シート作成ツール.exe release/
+        cp README.txt release/
+        cp -r DATA release/
+        cp -r template release/
+        mkdir release/logs
     
     - name: Upload Windows artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: DummyDataGenerator-Windows
-        path: dist/DummyDataGenerator.exe
+        name: windows-build
+        path: release/
 
   build-macos:
     runs-on: macos-latest
+    
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -48,39 +63,57 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pyinstaller
     
-    - name: Build with PyInstaller
+    - name: Build with PyInstaller (macOS)
       run: |
-        pyinstaller --onefile --windowed --name "DummyDataGenerator" main.py
+        pyinstaller --onefile --windowed --name "成績入力シート作成ツール" run.py
+    
+    - name: Create release package
+      run: |
+        mkdir release
+        cp dist/成績入力シート作成ツール release/
+        cp README.txt release/
+        cp -r DATA release/
+        cp -r template release/
+        mkdir release/logs
     
     - name: Upload macOS artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: DummyDataGenerator-macOS
-        path: dist/DummyDataGenerator
+        name: macos-build
+        path: release/
 
-  release:
+  create-release:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/v')
+    
     steps:
     - name: Download Windows artifact
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
-        name: DummyDataGenerator-Windows
-        path: ./windows
+        name: windows-build
+        path: windows-release
     
     - name: Download macOS artifact
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
-        name: DummyDataGenerator-macOS
-        path: ./macos
+        name: macos-build
+        path: macos-release
+    
+    - name: Create ZIP archives
+      run: |
+        cd windows-release && zip -r ../成績入力シート作成ツール-Windows.zip . && cd ..
+        cd macos-release && zip -r ../成績入力シート作成ツール-macOS.zip . && cd ..
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          ./windows/DummyDataGenerator.exe
-          ./macos/DummyDataGenerator
+          成績入力シート作成ツール-Windows.zip
+          成績入力シート作成ツール-macOS.zip
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
